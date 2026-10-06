@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import * as pdfjsLib from "pdfjs-dist";
 
 import WizardProgress from "./WizardProgress";
 import ResumeStep from "./ResumeStep";
@@ -14,9 +15,27 @@ import type {
     InterviewType,
 } from "../../types/tree";
 
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+    "pdfjs-dist/build/pdf.worker.min.mjs",
+    import.meta.url
+).toString();
+
+interface GeneratedQuestion {
+    question: string;
+    hook?: string;
+    category?: string;
+    branchType?: string;
+    difficulty?: string;
+    idealAnswerOutline?: string[];
+}
+
+interface AnalyzeResumeResult {
+    resumeProfile: Record<string, unknown>;
+    questions: GeneratedQuestion[];
+}
+
 function NewTreeWizard() {
     const navigate = useNavigate();
-
     const { user } = useAuth();
 
     const [step, setStep] = useState(1);
@@ -24,11 +43,9 @@ function NewTreeWizard() {
     const [resumeFile, setResumeFile] =
         useState<File | null>(null);
 
-    const [resumeText, setResumeText] =
-        useState("");
+    const [resumeText, setResumeText] = useState("");
 
-    const [role, setRole] =
-        useState("");
+    const [role, setRole] = useState("");
 
     const [level, setLevel] =
         useState<ExperienceLevel | "">("");
@@ -36,17 +53,14 @@ function NewTreeWizard() {
     const [interviewType, setInterviewType] =
         useState<InterviewType | "">("");
 
-    const [company, setCompany] =
-        useState("");
+    const [company, setCompany] = useState("");
 
     const [jobDescription, setJobDescription] =
         useState("");
 
-    const [error, setError] =
-        useState("");
+    const [error, setError] = useState("");
 
-    const [creating, setCreating] =
-        useState(false);
+    const [creating, setCreating] = useState(false);
 
     function validateStep() {
         setError("");
@@ -74,10 +88,7 @@ function NewTreeWizard() {
 
         if (step === 2) {
             if (!role.trim()) {
-                setError(
-                    "Please enter your target role."
-                );
-
+                setError("Please enter your target role.");
                 return false;
             }
 
@@ -85,7 +96,6 @@ function NewTreeWizard() {
                 setError(
                     "Please select your experience level."
                 );
-
                 return false;
             }
 
@@ -93,7 +103,6 @@ function NewTreeWizard() {
                 setError(
                     "Please select an interview type."
                 );
-
                 return false;
             }
         }
@@ -119,6 +128,32 @@ function NewTreeWizard() {
         );
     }
 
+    async function extractPdfText(file: File) {
+        const arrayBuffer = await file.arrayBuffer();
+
+        const pdf = await pdfjsLib.getDocument({
+            data: arrayBuffer,
+        }).promise;
+
+        let extractedText = "";
+
+        for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+            const page = await pdf.getPage(pageNumber);
+
+            const content = await page.getTextContent();
+
+            const pageText = content.items
+                .map((item) =>
+                    "str" in item ? item.str : ""
+                )
+                .join(" ");
+
+            extractedText += `${pageText}\n`;
+        }
+
+        return extractedText.trim();
+    }
+
     async function handleGenerate() {
         if (!validateStep()) {
             return;
@@ -135,145 +170,294 @@ function NewTreeWizard() {
         setCreating(true);
         setError("");
 
-        const title = company
-            ? `${role} — ${company}`
-            : `${role} Interview`;
+        let treeId: string | null = null;
+        let uploadedFilePath: string | null = null;
 
-        // ============================================
-        // 1. CREATE TREE
-        // ============================================
+        try {
+            const title = company
+                ? `${role} — ${company}`
+                : `${role} Interview`;
 
-        const {
-            data: tree,
-            error: createError,
-        } = await supabase
-            .from("trees")
-            .insert({
-                user_id: user.id,
+            // ============================================
+            // 1. GET RESUME TEXT
+            // ============================================
 
-                title,
+            let finalResumeText = resumeText.trim();
 
-                role: role.trim(),
+            if (resumeFile) {
+                finalResumeText =
+                    await extractPdfText(resumeFile);
+            }
 
-                level,
-
-                interview_type: interviewType,
-
-                company:
-                    company.trim() || null,
-
-                job_description:
-                    jobDescription.trim() || null,
-
-                resume_profile: null,
-
-                resume_path: null,
-            })
-            .select()
-            .single();
-
-        if (createError || !tree) {
-            console.error(createError);
-
-            setError(
-                "Unable to create your interview tree. Please try again."
-            );
-
-            setCreating(false);
-
-            return;
-        }
-
-        // ============================================
-        // 2. UPLOAD RESUME PDF
-        // ============================================
-
-        if (resumeFile) {
-            const fileExtension =
-                resumeFile.name
-                    .split(".")
-                    .pop()
-                    ?.toLowerCase() || "pdf";
-
-            const filePath =
-                `${user.id}/${tree.id}/resume.${fileExtension}`;
-
-            const {
-                error: uploadError,
-            } = await supabase.storage
-                .from("resumes")
-                .upload(
-                    filePath,
-                    resumeFile,
-                    {
-                        contentType:
-                            resumeFile.type,
-
-                        upsert: false,
-                    }
+            if (!finalResumeText) {
+                throw new Error(
+                    "Unable to extract text from your resume."
                 );
+            }
 
-            if (uploadError) {
-                console.error(uploadError);
-
-                // Clean up the tree if the resume
-                // upload failed.
-                await supabase
-                    .from("trees")
-                    .delete()
-                    .eq("id", tree.id);
-
-                setError(
-                    "Your interview tree was created, but the resume upload failed. Please try again."
+            if (finalResumeText.length < 50) {
+                throw new Error(
+                    "The resume does not contain enough readable text."
                 );
-
-                setCreating(false);
-
-                return;
             }
 
             // ============================================
-            // 3. SAVE RESUME PATH
+            // 2. CREATE TREE
             // ============================================
 
             const {
-                error: updateError,
+                data: tree,
+                error: createError,
+            } = await supabase
+                .from("trees")
+                .insert({
+                    user_id: user.id,
+                    title,
+                    role: role.trim(),
+                    level,
+                    interview_type: interviewType,
+                    company: company.trim() || null,
+                    job_description:
+                        jobDescription.trim() || null,
+                    resume_profile: null,
+                    resume_path: null,
+                })
+                .select()
+                .single();
+
+            if (createError || !tree) {
+                console.error(createError);
+
+                throw new Error(
+                    "Unable to create your interview tree."
+                );
+            }
+
+            treeId = tree.id;
+
+            // ============================================
+            // 3. UPLOAD RESUME PDF
+            // ============================================
+
+            if (resumeFile) {
+                const fileExtension =
+                    resumeFile.name
+                        .split(".")
+                        .pop()
+                        ?.toLowerCase() || "pdf";
+
+                const filePath =
+                    `${user.id}/${tree.id}/resume.${fileExtension}`;
+
+                const {
+                    error: uploadError,
+                } = await supabase.storage
+                    .from("resumes")
+                    .upload(
+                        filePath,
+                        resumeFile,
+                        {
+                            contentType: resumeFile.type,
+                            upsert: false,
+                        }
+                    );
+
+                if (uploadError) {
+                    console.error(uploadError);
+
+                    throw new Error(
+                        "Your resume upload failed. Please try again."
+                    );
+                }
+
+                uploadedFilePath = filePath;
+
+                const {
+                    error: updateError,
+                } = await supabase
+                    .from("trees")
+                    .update({
+                        resume_path: filePath,
+                    })
+                    .eq("id", tree.id);
+
+                if (updateError) {
+                    console.error(updateError);
+
+                    throw new Error(
+                        "Unable to save your resume information."
+                    );
+                }
+            }
+
+            // ============================================
+            // 4. CALL ANALYZE-RESUME EDGE FUNCTION
+            // ============================================
+
+            const {
+                data: functionData,
+                error: functionError,
+            } = await supabase.functions.invoke(
+                "analyze-resume",
+                {
+                    body: {
+                        resumeText: finalResumeText,
+                        role: role.trim(),
+                        level,
+                        interviewType,
+                        company: company.trim(),
+                        jobDescription:
+                            jobDescription.trim(),
+                    },
+                }
+            );
+
+            if (functionError) {
+                console.error(
+                    "analyze-resume error:",
+                    functionError
+                );
+
+                throw new Error(
+                    "AI analysis failed. Please try again."
+                );
+            }
+
+            if (
+                !functionData ||
+                !functionData.success ||
+                !functionData.data
+            ) {
+                console.error(
+                    "Invalid analyze-resume response:",
+                    functionData
+                );
+
+                throw new Error(
+                    "AI returned an invalid response."
+                );
+            }
+
+            const analysis =
+                functionData.data as AnalyzeResumeResult;
+
+            if (
+                !analysis.resumeProfile ||
+                !Array.isArray(analysis.questions)
+            ) {
+                throw new Error(
+                    "AI response is missing resume analysis or questions."
+                );
+            }
+
+            // ============================================
+            // 5. SAVE RESUME PROFILE
+            // ============================================
+
+            const {
+                error: profileError,
             } = await supabase
                 .from("trees")
                 .update({
-                    resume_path: filePath,
+                    resume_profile:
+                        analysis.resumeProfile,
                 })
                 .eq("id", tree.id);
 
-            if (updateError) {
-                console.error(updateError);
+            if (profileError) {
+                console.error(profileError);
 
-                // Remove uploaded file.
+                throw new Error(
+                    "Unable to save the AI resume analysis."
+                );
+            }
+
+            // ============================================
+            // 6. CREATE LAYER 1 NODES
+            // ============================================
+
+            const nodes = analysis.questions
+                .filter(
+                    (item) =>
+                        item &&
+                        typeof item.question === "string" &&
+                        item.question.trim()
+                )
+                .map((item, index) => ({
+                    tree_id: tree.id,
+                    parent_id: null,
+                    layer: 1,
+                    question: item.question.trim(),
+                    hook: item.hook || null,
+                    category: item.category || null,
+                    branch_type: item.branchType || null,
+                    difficulty: item.difficulty || null,
+                    ideal_answer_outline:
+                        item.idealAnswerOutline || [],
+                    user_answer: null,
+                    evaluation: null,
+                    status: "Unanswered",
+                    position_x: index * 320,
+                    position_y: 100,
+                    collapsed: false,
+                }));
+
+            if (nodes.length === 0) {
+                throw new Error(
+                    "AI did not generate any interview questions."
+                );
+            }
+
+            const {
+                error: nodesError,
+            } = await supabase
+                .from("nodes")
+                .insert(nodes);
+
+            if (nodesError) {
+                console.error(nodesError);
+
+                throw new Error(
+                    "Unable to save the generated interview questions."
+                );
+            }
+
+            // ============================================
+            // 7. FINISH
+            // ============================================
+
+            navigate(`/trees/${tree.id}`);
+        } catch (error) {
+            console.error(
+                "Interview tree generation failed:",
+                error
+            );
+
+            // ============================================
+            // CLEANUP
+            // ============================================
+
+            if (uploadedFilePath) {
                 await supabase.storage
                     .from("resumes")
-                    .remove([filePath]);
+                    .remove([uploadedFilePath]);
+            }
 
-                // Remove tree.
+            if (treeId) {
                 await supabase
                     .from("trees")
                     .delete()
-                    .eq("id", tree.id);
-
-                setError(
-                    "Unable to save your resume information. Please try again."
-                );
-
-                setCreating(false);
-
-                return;
+                    .eq("id", treeId);
             }
+
+            setError(
+                error instanceof Error
+                    ? error.message
+                    : "Something went wrong while creating your interview tree."
+            );
+        } finally {
+            setCreating(false);
         }
-
-        // ============================================
-        // 4. FINISH
-        // ============================================
-
-        navigate(`/trees/${tree.id}`);
     }
 
     return (
@@ -285,13 +469,12 @@ function NewTreeWizard() {
                         onClick={() =>
                             navigate("/dashboard")
                         }
+                        disabled={creating}
                     >
                         ← Back to dashboard
                     </button>
 
-                    <h1>
-                        Create Interview Tree
-                    </h1>
+                    <h1>Create Interview Tree</h1>
 
                     <p>
                         Build a personalised interview
@@ -375,6 +558,7 @@ function NewTreeWizard() {
                             <button
                                 className="primary-button wizard-next"
                                 onClick={handleNext}
+                                disabled={creating}
                             >
                                 Continue
                             </button>
@@ -385,7 +569,7 @@ function NewTreeWizard() {
                                 disabled={creating}
                             >
                                 {creating
-                                    ? "Creating..."
+                                    ? "Analyzing resume..."
                                     : "Generate my interview tree"}
                             </button>
                         )}
