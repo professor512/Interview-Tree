@@ -1515,3 +1515,123 @@ button {
   color: #94a3b8;
   font-weight: 600;
 }
+
+/* =========================================
+   Interview Question Node
+   ========================================= */
+
+.interview-question-node {
+  width: 280px;
+  padding: 16px;
+  box-sizing: border-box;
+  border-radius: 14px;
+  border: 1px solid #dbe2ea;
+  background: #ffffff;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.08);
+  color: #0f172a;
+}
+
+.interview-question-node:hover {
+  border-color: #94a3b8;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+}
+
+.tree-node-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.tree-node-layer {
+  font-size: 10px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.tree-node-difficulty {
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.tree-node-difficulty.easy {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.tree-node-difficulty.medium {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.tree-node-difficulty.hard {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.tree-node-question {
+  margin-bottom: 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  font-weight: 600;
+}
+
+.tree-node-category {
+  display: inline-block;
+  margin-bottom: 10px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.tree-node-hook {
+  margin-bottom: 12px;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.tree-node-hook strong {
+  color: #475569;
+}
+
+.tree-node-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid #f1f5f9;
+  color: #94a3b8;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.tree-node-status.answered {
+  color: #16a34a;
+}
+
+.tree-node-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #cbd5e1;
+}
+
+.tree-node-status.answered .tree-node-status-dot {
+  background: #22c55e;
+}
+
+.tree-node-handle {
+  width: 8px;
+  height: 8px;
+  border: 2px solid #ffffff;
+  background: #64748b;
+}

@@ -10,30 +10,109 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import { supabase } from "../../lib/supabase";
-
+import InterviewQuestionNode from "./InterviewQuestionNode";
+import dagre from "dagre";
 interface DatabaseNode {
     id: string;
+    parent_id: string | null;
     question: string;
     layer: number;
     category: string | null;
     difficulty: string | null;
+    hook: string | null;
+    status: "Unanswered" | "Answered";
 }
 
 interface InterviewTreeCanvasProps {
     treeId: string;
 }
 
+const nodeTypes = {
+    interviewQuestion: InterviewQuestionNode,
+};
+
+const NODE_WIDTH = 280;
+const NODE_HEIGHT = 220;
+
+function getLayoutedElements(
+    nodes: Node[],
+    edges: {
+        id: string;
+        source: string;
+        target: string;
+    }[]
+) {
+    const graph = new dagre.graphlib.Graph();
+
+    graph.setDefaultEdgeLabel(() => ({}));
+
+    graph.setGraph({
+        rankdir: "TB",
+        ranksep: 100,
+        nodesep: 70,
+    });
+
+    nodes.forEach((node) => {
+        graph.setNode(node.id, {
+            width: NODE_WIDTH,
+            height: NODE_HEIGHT,
+        });
+    });
+
+    edges.forEach((edge) => {
+        graph.setEdge(
+            edge.source,
+            edge.target
+        );
+    });
+
+    dagre.layout(graph);
+
+    const layoutedNodes = nodes.map(
+        (node) => {
+            const position = graph.node(node.id);
+
+            return {
+                ...node,
+                position: {
+                    x:
+                        position.x -
+                        NODE_WIDTH / 2,
+                    y:
+                        position.y -
+                        NODE_HEIGHT / 2,
+                },
+            };
+        }
+    );
+
+    return layoutedNodes;
+}
+
 function InterviewTreeCanvas({
     treeId,
 }: InterviewTreeCanvasProps) {
     const [nodes, setNodes] = useState<Node[]>([]);
+    const [edges, setEdges] = useState<
+        {
+            id: string;
+            source: string;
+            target: string;
+            type?: "smoothstep";
+        }[]
+    >([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
 
     useEffect(() => {
+        let cancelled = false;
+
         async function loadNodes() {
+            setLoading(true);
+            setError("");
+
             console.log(
-                "Fetching nodes for:",
+                "Loading interview nodes:",
                 treeId
             );
 
@@ -43,129 +122,107 @@ function InterviewTreeCanvas({
             } = await supabase
                 .from("nodes")
                 .select(
-                    "id, question, layer, category, difficulty"
+                    "id, parent_id, question, layer, category, difficulty, hook, status"
                 )
                 .eq("tree_id", treeId)
                 .order("created_at", {
                     ascending: true,
                 });
 
-            console.log("Fetched data:", data);
+            console.log("Supabase result:", data);
             console.log(
-                "Fetch error:",
+                "Supabase error:",
                 fetchError
             );
 
-            if (fetchError) {
-                setError(fetchError.message);
-                setLoading(false);
+            if (cancelled) {
                 return;
             }
 
-            const generatedNodes: Node[] =
-                (data as DatabaseNode[]).map(
+            if (fetchError) {
+                console.error(fetchError);
+
+                setError(
+                    fetchError.message ||
+                    "Unable to load interview questions."
+                );
+
+                setLoading(false);
+
+                return;
+            }
+
+            const databaseNodes =
+                (data || []) as DatabaseNode[];
+
+            const flowEdges = databaseNodes
+                .filter((item) => item.parent_id)
+                .map((item) => ({
+                    id: `edge-${item.parent_id}-${item.id}`,
+                    source: item.parent_id as string,
+                    target: item.id,
+                    type: "smoothstep" as const,
+                }));
+
+            console.log(
+                "Number of nodes:",
+                databaseNodes.length
+            );
+
+            const flowNodes: Node[] =
+                databaseNodes.map(
                     (item, index) => ({
                         id: item.id,
 
+                        type: "interviewQuestion",
+
                         position: {
-                            x: (index % 3) * 350 + 100,
+                            x: (index % 3) * 360 + 100,
                             y:
-                                Math.floor(index / 3) * 250 +
+                                Math.floor(index / 3) * 260 +
                                 100,
                         },
 
                         data: {
-                            label: (
-                                <div
-                                    style={{
-                                        padding: "16px",
-                                        width: "280px",
-                                    }}
-                                >
-                                    <div
-                                        style={{
-                                            fontSize: "11px",
-                                            fontWeight: 700,
-                                            color: "#64748b",
-                                            marginBottom: "8px",
-                                        }}
-                                    >
-                                        LAYER {item.layer}
-                                    </div>
-
-                                    <div
-                                        style={{
-                                            fontSize: "15px",
-                                            fontWeight: 600,
-                                            lineHeight: 1.4,
-                                            color: "#0f172a",
-                                            marginBottom: "10px",
-                                        }}
-                                    >
-                                        {item.question}
-                                    </div>
-
-                                    {item.category && (
-                                        <div
-                                            style={{
-                                                fontSize: "12px",
-                                                color: "#475569",
-                                            }}
-                                        >
-                                            {item.category}
-                                        </div>
-                                    )}
-
-                                    {item.difficulty && (
-                                        <div
-                                            style={{
-                                                fontSize: "12px",
-                                                color: "#64748b",
-                                                marginTop: "5px",
-                                            }}
-                                        >
-                                            Difficulty:{" "}
-                                            {item.difficulty}
-                                        </div>
-                                    )}
-                                </div>
-                            ),
-                        },
-
-                        style: {
-                            width: 280,
-                            borderRadius: 14,
-                            border: "1px solid #cbd5e1",
-                            background: "#ffffff",
-                            boxShadow:
-                                "0 4px 16px rgba(15, 23, 42, 0.12)",
-                            padding: 0,
+                            question: item.question,
+                            layer: item.layer,
+                            category: item.category,
+                            difficulty: item.difficulty,
+                            hook: item.hook,
+                            status:
+                                item.status === "Answered"
+                                    ? "Answered"
+                                    : "Unanswered",
                         },
                     })
                 );
 
             console.log(
                 "React Flow nodes:",
-                generatedNodes
+                flowNodes
             );
 
-            setNodes(generatedNodes);
+            const layoutedNodes =
+                getLayoutedElements(
+                    flowNodes,
+                    flowEdges
+                );
+
+            setNodes(layoutedNodes);
+            setEdges(flowEdges);
             setLoading(false);
         }
 
         loadNodes();
+
+        return () => {
+            cancelled = true;
+        };
     }, [treeId]);
 
     if (loading) {
         return (
-            <div
-                style={{
-                    height: "600px",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                }}
-            >
+            <div className="tree-canvas-state">
                 Loading interview questions...
             </div>
         );
@@ -173,15 +230,9 @@ function InterviewTreeCanvas({
 
     if (error) {
         return (
-            <div
-                style={{
-                    height: "600px",
-                    padding: "30px",
-                    color: "#dc2626",
-                }}
-            >
+            <div className="tree-canvas-state tree-canvas-error">
                 <h3>
-                    Failed to load questions
+                    Failed to load interview tree
                 </h3>
 
                 <p>{error}</p>
@@ -191,15 +242,8 @@ function InterviewTreeCanvas({
 
     if (nodes.length === 0) {
         return (
-            <div
-                style={{
-                    height: "600px",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                }}
-            >
-                No questions found.
+            <div className="tree-canvas-state">
+                No interview questions found.
             </div>
         );
     }
@@ -208,8 +252,9 @@ function InterviewTreeCanvas({
         <div
             style={{
                 width: "100%",
-                height: "600px",
-                border: "3px solid blue",
+                height: "calc(100vh - 180px)",
+                minHeight: "600px",
+                border: "1px solid #e2e8f0",
                 borderRadius: "16px",
                 overflow: "hidden",
                 background: "#f8fafc",
@@ -217,7 +262,12 @@ function InterviewTreeCanvas({
         >
             <ReactFlow
                 nodes={nodes}
+                edges={edges}
+                nodeTypes={nodeTypes}
                 fitView
+                fitViewOptions={{
+                    padding: 0.2,
+                }}
             >
                 <Background />
 
