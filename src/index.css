@@ -1635,3 +1635,117 @@ button {
   border: 2px solid #ffffff;
   background: #64748b;
 }
+
+/* =========================================
+   Answer Panel
+   ========================================= */
+
+.answer-panel {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 20;
+  width: 420px;
+  max-width: calc(100vw - 40px);
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.16);
+  overflow: hidden;
+}
+
+.answer-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.answer-panel-label {
+  display: block;
+  margin-bottom: 6px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.answer-panel-header h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.answer-panel-close {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 22px;
+  cursor: pointer;
+}
+
+.answer-panel-close:hover {
+  background: #e2e8f0;
+}
+
+.answer-panel-body {
+  padding: 20px;
+}
+
+.answer-panel-body label {
+  display: block;
+  margin-bottom: 8px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.answer-panel-body textarea {
+  width: 100%;
+  min-height: 180px;
+  box-sizing: border-box;
+  resize: vertical;
+  padding: 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  outline: none;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #0f172a;
+}
+
+.answer-panel-body textarea:focus {
+  border-color: #64748b;
+  box-shadow: 0 0 0 3px rgba(100, 116, 139, 0.12);
+}
+
+.answer-panel-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.answer-panel-hint {
+  color: #94a3b8;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.interview-question-node {
+  cursor: pointer;
+}
+
+.interview-question-node:active {
+  transform: scale(0.99);
+}

@@ -8,7 +8,7 @@ import {
 } from "@xyflow/react";
 
 import "@xyflow/react/dist/style.css";
-
+import AnswerPanel from "../interview/AnswerPanel";
 import { supabase } from "../../lib/supabase";
 import InterviewQuestionNode from "./InterviewQuestionNode";
 import dagre from "dagre";
@@ -21,6 +21,13 @@ interface DatabaseNode {
     difficulty: string | null;
     hook: string | null;
     status: "Unanswered" | "Answered";
+}
+
+interface TreeMetadata {
+    role: string;
+    level: string;
+    interview_type: string;
+    resume_profile: Record<string, unknown> | null;
 }
 
 interface InterviewTreeCanvasProps {
@@ -93,6 +100,8 @@ function InterviewTreeCanvas({
     treeId,
 }: InterviewTreeCanvasProps) {
     const [nodes, setNodes] = useState<Node[]>([]);
+    const [databaseNodes, setDatabaseNodes] = useState<DatabaseNode[]>([]);
+    const [selectedNode, setSelectedNode] = useState<DatabaseNode | null>(null);
     const [edges, setEdges] = useState<
         {
             id: string;
@@ -103,12 +112,30 @@ function InterviewTreeCanvas({
     >([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
+    const [treeMetadata, setTreeMetadata] =
+        useState<TreeMetadata | null>(null);
+    const [submitting, setSubmitting] = useState(false);
+    const [refreshKey, setRefreshKey] = useState(0);
+
 
     useEffect(() => {
         let cancelled = false;
 
         async function loadNodes() {
             setLoading(true);
+            const { data: treeData, error: treeError } = await supabase
+                .from("trees")
+                .select("role, level, interview_type, resume_profile")
+                .eq("id", treeId)
+                .single();
+
+            if (treeError) {
+                setError(treeError.message);
+                setLoading(false);
+                return;
+            }
+
+            setTreeMetadata(treeData as TreeMetadata);
             setError("");
 
             console.log(
@@ -155,6 +182,8 @@ function InterviewTreeCanvas({
             const databaseNodes =
                 (data || []) as DatabaseNode[];
 
+            setDatabaseNodes(databaseNodes);
+
             const flowEdges = databaseNodes
                 .filter((item) => item.parent_id)
                 .map((item) => ({
@@ -193,7 +222,10 @@ function InterviewTreeCanvas({
                                 item.status === "Answered"
                                     ? "Answered"
                                     : "Unanswered",
+                            height: "calc(100vh - 180px)",
+                            minHeight: "600px",
                         },
+
                     })
                 );
 
@@ -218,7 +250,107 @@ function InterviewTreeCanvas({
         return () => {
             cancelled = true;
         };
-    }, [treeId]);
+    }, [treeId, refreshKey]);
+
+    async function handleSubmitAnswer(answer: string) {
+        if (!selectedNode || !treeMetadata || submitting) {
+            return;
+        }
+
+        setSubmitting(true);
+        setError("");
+
+        try {
+            const { data, error: functionError } =
+                await supabase.functions.invoke("evaluate-and-expand", {
+                    body: {
+                        question: selectedNode.question,
+                        userAnswer: answer,
+                        role: treeMetadata.role,
+                        level: treeMetadata.level,
+                        interviewType: treeMetadata.interview_type,
+                        resumeProfile: treeMetadata.resume_profile,
+                    },
+                });
+
+            if (functionError) {
+                throw functionError;
+            }
+
+            if (!data?.success || !data?.data) {
+                throw new Error(
+                    data?.error || "Unable to evaluate your answer."
+                );
+            }
+
+            const { evaluation, followUps } = data.data;
+
+            const { error: updateError } = await supabase
+                .from("nodes")
+                .update({
+                    user_answer: answer,
+                    evaluation,
+                    status: "Answered",
+                })
+                .eq("id", selectedNode.id);
+
+            if (updateError) {
+                throw updateError;
+            }
+
+
+            console.log("Evaluation saved:", evaluation);
+
+            if (!Array.isArray(followUps) || followUps.length === 0) {
+                setSelectedNode(null);
+                alert("Answer evaluated and saved. No follow-up questions were generated.");
+                return;
+            }
+
+            const followUpNodes = followUps.map((item: {
+                question: string;
+                hook?: string;
+                category?: string;
+                branchType?: string;
+                difficulty?: string;
+                idealAnswerOutline?: string[];
+            }) => ({
+                tree_id: treeId,
+                parent_id: selectedNode.id,
+                layer: selectedNode.layer + 1,
+                question: item.question,
+                hook: item.hook ?? null,
+                category: item.category ?? null,
+                branch_type: item.branchType ?? null,
+                difficulty: item.difficulty ?? null,
+                ideal_answer_outline: item.idealAnswerOutline ?? [],
+                status: "Unanswered" as const,
+            }));
+
+            const { error: insertError } = await supabase
+                .from("nodes")
+                .insert(followUpNodes);
+
+            if (insertError) {
+                throw insertError;
+            }
+
+            setSelectedNode(null);
+            setRefreshKey((previous) => previous + 1);
+            alert(`Answer saved! ${followUpNodes.length} follow-up questions added.`);
+
+        } catch (error) {
+            console.error("Answer submission failed:", error);
+
+            alert(
+                error instanceof Error
+                    ? error.message
+                    : "Something went wrong while evaluating your answer."
+            );
+        } finally {
+            setSubmitting(false);
+        }
+    }
 
     if (loading) {
         return (
@@ -251,6 +383,7 @@ function InterviewTreeCanvas({
     return (
         <div
             style={{
+                position: "relative",
                 width: "100%",
                 height: "calc(100vh - 180px)",
                 minHeight: "600px",
@@ -268,6 +401,15 @@ function InterviewTreeCanvas({
                 fitViewOptions={{
                     padding: 0.2,
                 }}
+                onNodeClick={(_, node) => {
+                    const selected = databaseNodes.find(
+                        (item) => item.id === node.id
+                    );
+
+                    if (selected) {
+                        setSelectedNode(selected);
+                    }
+                }}
             >
                 <Background />
 
@@ -275,6 +417,14 @@ function InterviewTreeCanvas({
 
                 <MiniMap />
             </ReactFlow>
+            {selectedNode && (
+                <AnswerPanel
+                    question={selectedNode.question}
+                    onClose={() => setSelectedNode(null)}
+                    onSubmit={handleSubmitAnswer}
+                    submitting={submitting}
+                />
+            )}
         </div>
     );
 }

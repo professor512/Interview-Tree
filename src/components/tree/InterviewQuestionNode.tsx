@@ -11,6 +11,7 @@ interface InterviewQuestionNodeData {
     difficulty: string | null;
     hook: string | null;
     status: "Unanswered" | "Answered";
+    onSelect?: () => void;
 }
 
 function InterviewQuestionNode({
@@ -20,7 +21,10 @@ function InterviewQuestionNode({
         data as unknown as InterviewQuestionNodeData;
 
     return (
-        <div className="interview-question-node">
+        <div
+            className="interview-question-node"
+            onClick={() => nodeData.onSelect?.()}
+        >
             <Handle
                 type="target"
                 position={Position.Top}
