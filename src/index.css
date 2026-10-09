@@ -1652,6 +1652,11 @@ button {
   border-radius: 16px;
   box-shadow: 0 16px 40px rgba(15, 23, 42, 0.16);
   overflow: hidden;
+
+  max-height: calc(100vh - 40px);
+  display: flex;
+  flex-direction: column;
+
 }
 
 .answer-panel-header {
@@ -1698,6 +1703,11 @@ button {
 
 .answer-panel-body {
   padding: 20px;
+
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+
 }
 
 .answer-panel-body label {
@@ -1748,4 +1758,78 @@ button {
 
 .interview-question-node:active {
   transform: scale(0.99);
+}
+
+
+.evaluation-results {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.evaluation-section {
+  padding: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.evaluation-section h3 {
+  margin: 0 0 10px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.evaluation-section p {
+  margin: 0;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.evaluation-section ul {
+  margin: 0;
+  padding-left: 19px;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.evaluation-section li+li {
+  margin-top: 5px;
+}
+
+.saved-answer {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.evaluation-score {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid #bbf7d0;
+  border-radius: 14px;
+  background: #f0fdf4;
+}
+
+.evaluation-score strong {
+  display: block;
+  color: #166534;
+  font-size: 28px;
+  line-height: 1.3;
+}
+
+.evaluation-rating {
+  padding: 6px 10px;
+  border-radius: 20px;
+  background: #dcfce7;
+  color: #166534;
+  font-size: 12px;
+  font-weight: 700;
 }

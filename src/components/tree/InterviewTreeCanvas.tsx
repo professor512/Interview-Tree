@@ -21,6 +21,16 @@ interface DatabaseNode {
     difficulty: string | null;
     hook: string | null;
     status: "Unanswered" | "Answered";
+    user_answer: string | null;
+    evaluation: {
+        score?: number;
+        rating?: string;
+        summary?: string;
+        strengths?: string[];
+        weaknesses?: string[];
+        missingPoints?: string[];
+        feedback?: string;
+    } | null;
 }
 
 interface TreeMetadata {
@@ -149,7 +159,7 @@ function InterviewTreeCanvas({
             } = await supabase
                 .from("nodes")
                 .select(
-                    "id, parent_id, question, layer, category, difficulty, hook, status"
+                    "id, parent_id, question, layer, category, difficulty, hook, status, user_answer, evaluation"
                 )
                 .eq("tree_id", treeId)
                 .order("created_at", {
@@ -417,14 +427,32 @@ function InterviewTreeCanvas({
 
                 <MiniMap />
             </ReactFlow>
+
             {selectedNode && (
                 <AnswerPanel
                     question={selectedNode.question}
+                    status={selectedNode.status}
+                    savedAnswer={selectedNode.user_answer}
+                    evaluation={
+                        selectedNode.evaluation &&
+                            typeof selectedNode.evaluation === "object"
+                            ? selectedNode.evaluation as {
+                                score?: number;
+                                rating?: string;
+                                summary?: string;
+                                strengths?: string[];
+                                weaknesses?: string[];
+                                missingPoints?: string[];
+                                feedback?: string;
+                            }
+                            : null
+                    }
                     onClose={() => setSelectedNode(null)}
                     onSubmit={handleSubmitAnswer}
                     submitting={submitting}
                 />
             )}
+
         </div>
     );
 }
